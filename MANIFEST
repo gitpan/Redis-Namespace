@@ -1,0 +1,15 @@
+Build.PL
+Changes
+LICENSE
+META.json
+README.md
+cpanfile
+lib/Redis/Namespace.pm
+t/00_compile.t
+t/01_basic.t
+t/03_pubsub.t
+t/04_pipeline.t
+xt/02_perlcritic.t
+xt/perlcriticrc
+META.yml
+MANIFEST
