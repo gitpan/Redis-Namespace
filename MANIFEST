@@ -9,6 +9,7 @@ t/00_compile.t
 t/01_basic.t
 t/03_pubsub.t
 t/04_pipeline.t
+t/05_scan.t
 xt/02_perlcritic.t
 xt/perlcriticrc
 META.yml

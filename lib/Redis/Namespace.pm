@@ -1,10 +1,8 @@
 package Redis::Namespace;
 
-# ABSTRACT: a wrapper of Redis.pm that namespaces all Redis calls
-
 use strict;
 use warnings;
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 use Redis;
 
@@ -113,6 +111,41 @@ our %BEFORE_FILTERS = (
         my @keys = $self->add_namespace(splice @args, 0, $number);
         return ($self->add_namespace($first), $number, @keys, @args);
     },
+
+
+    scan => sub {
+        my ($self, @args) = @_;
+        my @res;
+
+        # first arg is iteration key
+        if(@args) {
+            my $first = shift @args;
+            push @res, $first;
+        }
+
+        # parse options
+        my $has_pattern = 0;
+        while(@args) {
+            my $option = lc shift @args;
+            if($option eq 'match') {
+                my $pattern = shift @args;
+                push @res, $option, $self->add_namespace($pattern);
+                $has_pattern = 1;
+            } elsif($option eq 'count') {
+                my $count = shift @args;
+                push @res, $option, $count;
+            } else {
+                push @res, $option;
+            }
+        }
+
+        # add pattern option
+        unless($has_pattern) {
+            push @res, 'match', $self->add_namespace('*');
+        }
+
+        return @res;
+    },
 );
 
 our %AFTER_FILTERS = (
@@ -132,6 +165,12 @@ our %AFTER_FILTERS = (
     first => sub {
         my ($self, $first, @args) = @_;
         return ($self->rem_namespace($first), @args);
+    },
+
+    scan => sub {
+        my ($self, $iter, $list) = @_;
+        my @keys = map { $self->rem_namespace($_) } @$list;
+        return ($iter, \@keys);
     }
 );
 
@@ -223,6 +262,7 @@ our %COMMANDS = (
     getbit           => [ 'first' ],
     getrange         => [ 'first' ],
     getset           => [ 'first' ],
+    hscan            => [ 'first' ],
     hset             => [ 'first' ],
     hsetnx           => [ 'first' ],
     hget             => [ 'first' ],
@@ -260,6 +300,7 @@ our %COMMANDS = (
     mget             => [ 'all' ],
     monitor          => [ 'monitor' ],
     move             => [ 'first' ],
+    mscan            => [ 'first' ],
     mset             => [ 'alternate' ],
     msetnx           => [ 'alternate' ],
     object           => [ 'exclude_first' ],
@@ -299,10 +340,12 @@ our %COMMANDS = (
     slaveof          => [],
     smembers         => [ 'first' ],
     smove            => [ 'exclude_last' ],
+    scan             => [ 'scan', 'scan' ],
     sort             => [ 'sort'  ],
     spop             => [ 'first' ],
     srandmember      => [ 'first' ],
     srem             => [ 'first' ],
+    sscan            => [ 'first' ],
     strlen           => [ 'first' ],
     subscribe        => [ 'all' ],
     sunion           => [ 'all' ],
@@ -325,6 +368,7 @@ our %COMMANDS = (
     zrevrange        => [ 'first' ],
     zrevrangebyscore => [ 'first' ],
     zrevrank         => [ 'first' ],
+    zscan            => [ 'first' ],
     zscore           => [ 'first' ],
     zunionstore      => [ 'exclude_options' ],
 
@@ -448,9 +492,12 @@ sub punsubscribe {
 1;
 __END__
 
-=head1 AUTHOR
+=encoding utf-8
 
-Ichinose Shogo E<lt>shogo82148@gmail.comE<gt>
+=head1 NAME
+
+Redis::Namespace - a wrapper of Redis.pm that namespaces all Redis calls
+
 
 =head1 SYNOPSIS
 
@@ -471,6 +518,12 @@ Ichinose Shogo E<lt>shogo82148@gmail.comE<gt>
 
 Redis::Namespace is a wrapper of Redis.pm that namespaces all Redis calls.
 It is useful when you have multiple systems using Redis differently in your app.
+
+
+=head1 AUTHOR
+
+Ichinose Shogo E<lt>shogo82148@gmail.comE<gt>
+
 
 =head1 SEE ALSO
 

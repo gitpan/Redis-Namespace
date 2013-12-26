@@ -7,6 +7,8 @@ use Test::Fatal;
 
 use Redis::Namespace;
 
+eval { Test::RedisServer->new } or plan skip_all => 'redis-server is required in PATH to run this test';
+
 my $redis_server = Test::RedisServer->new;
 my $redis = Redis->new( $redis_server->connect_info );
 my $ns = Redis::Namespace->new(redis => $redis, namespace => 'ns');
@@ -59,16 +61,28 @@ subtest 'synchronous request with pending pipeline' => sub {
     is($clunk,           'eth',   'synchronous request processes pending ones');
 };
 
-pipeline_ok 'transaction',
-    (
-        [multi => [], 'OK'],
-        [set   => ['clunk' => 'eth'],  'QUEUED'],
-        [rpush => ['clunk' => 'oops'], 'QUEUED'],
-        [get => ['clunk'], 'QUEUED'],
-        [ exec => [],
-          [['OK', undef], [undef, 'ERR Operation against a key holding the wrong kind of value'], ['eth', undef],]
-      ],
-    );
+subtest 'transaction with error and pipeline' => sub {
+    my @responses;
+    my $s = sub { push @responses, [@_] };
+    $ns->multi($s);
+    $ns->set(clunk => 'eth', $s);
+    $ns->rpush(clunk => 'oops', $s);
+    $ns->get('clunk', $s);
+    $ns->exec($s);
+    $ns->wait_all_responses;
+
+    is(shift(@responses)->[0], 'OK'    , 'multi started' );
+    is(shift(@responses)->[0], 'QUEUED', 'queued');
+    is(shift(@responses)->[0], 'QUEUED', 'queued');
+    is(shift(@responses)->[0], 'QUEUED', 'queued');
+    my $resp = shift @responses;
+    is ($resp->[0]->[0]->[0], 'OK', 'set');
+    is ($resp->[0]->[1]->[0], undef, 'bad rpush value should be undef');
+    like ($resp->[0]->[1]->[1],
+          qr/(?:ERR|WRONGTYPE) Operation against a key holding the wrong kind of value/,
+          'bad rpush should give an error');
+    is ($resp->[0]->[2]->[0], 'eth', 'get should work');
+};
 
 subtest 'transaction with error and no pipeline' => sub {
     is($ns->multi, 'OK', 'multi');
@@ -77,7 +91,7 @@ subtest 'transaction with error and no pipeline' => sub {
     is($ns->get('clunk'), 'QUEUED', 'transactional GET');
     like(
         exception { $ns->exec },
-        qr{\[exec\] ERR Operation against a key holding the wrong kind of value,},
+        qr{\[exec\] (?:WRONGTYPE|ERR) Operation against a key holding the wrong kind of value,},
         'synchronous EXEC dies for intervening error'
     );
 };
