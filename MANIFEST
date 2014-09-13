@@ -12,5 +12,6 @@ t/04_pipeline.t
 t/05_scan.t
 xt/02_perlcritic.t
 xt/perlcriticrc
+xt/release/kwalitee.t
 META.yml
 MANIFEST
